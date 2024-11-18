@@ -1,12 +1,28 @@
 #import required libraries
+import pickle
+
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import RobustScaler
 
 
 def data_ingestion():
     yellow_taxi_trip_jan_2023_path = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet"
     jan_2023 = pd.read_parquet(yellow_taxi_trip_jan_2023_path)
     return jan_2023
+
+#function to ingest data and output a pandas DataFrame
+#with a target label
+def create_target_label(df):
+    """
+    Create a target variable column by subtracting the trip pick up from drop off and converts it minutes with data type of float for easy visualization and analysis.
+    """
+    #create the duration 
+    df["trip_duration_mins"] = df["tpep_dropoff_datetime"] - df["tpep_pickup_datetime"]
+    df["trip_duration_mins"] = df["trip_duration_mins"].dt.total_seconds().map(lambda x:round(x/60,2))
+
+    return df
 
 # treat missing values
 def treat_na(df):
@@ -38,7 +54,7 @@ def treat_na(df):
     return df
 
 # function to treat outliers
-def treat_outliers(df, year = None, month_number = None, lower_bound_percentile=None, upper_bound_percentile=None):
+def treat_outliers(df, year = None, month_number = None):
     """ 
     This functions takes in a dataframe, a year, number of month parameter, lower and upper bound percentiles. 
     Drop every observation that is outside the range of the year and month given, drops indices with negative value observations
@@ -58,8 +74,8 @@ def treat_outliers(df, year = None, month_number = None, lower_bound_percentile=
     outlier_indices = []
     for col in df_1.select_dtypes(include=["int64","float64"]).columns:
 
-        lower_bound = np.percentile(df_1[col],lower_bound_percentile)
-        upper_bound = np.percentile(df_1[col],upper_bound_percentile)
+        lower_bound = np.percentile(df_1[col],10)
+        upper_bound = np.percentile(df_1[col],95)
         outliers = np.where(df_1[col].lt(lower_bound) | df_1[col].gt(upper_bound))[0] #get indices of outliers
 
         outlier_indices.extend(outliers) #Append to the list outlier indices
@@ -91,5 +107,26 @@ def engineer_features(df):
     df_1 = df_1.drop(columns=["tpep_pickup_datetime","tpep_dropoff_datetime","VendorID"])
 
     #encode the store_and_fwd_flag
-    df_1["store_and_fwd_flag"] = df_1["store_and_fwd_flag"].replace(to_replace=["Y","N"], value=[1,2])
+    df_1["store_and_fwd_flag"] = df_1["store_and_fwd_flag"].rename_categories([1,2])
     return df_1
+
+def preprocess_data(df):
+
+    rs = RobustScaler()
+
+    df_1 = df.copy()
+    #split dataframe into target and training set
+    X = df_1.copy()
+    Y = X.pop("trip_duration_mins")
+
+
+    #Scale Features using RobustScaler
+    rs.fit(X)
+    X_train_transformed = rs.transform(X)
+
+    #serialize transformation object
+    file_name = "model_store/transformation_obj.pkl"
+    with open(file_name,"wb") as outfile:
+        pickle.dump(rs,outfile)
+
+    return X_train_transformed,Y

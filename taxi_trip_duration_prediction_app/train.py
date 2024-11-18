@@ -1,28 +1,10 @@
+#serialization
+import pickle
+
 #data preprocessing
-import pandas as pd
-import numpy as np
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import RobustScaler
+from data_processing import *
 
-def preprocess_data(df, test_size):
-
-    rs = RobustScaler()
-
-    df_1 = df.copy()
-    #split dataframe into target and training set
-    X = df_1.copy()
-    Y = X.pop("trip_duration_mins")
-
-    #split into train and test set
-    X_train, X_test, Y_train, Y_test = train_test_split(X,Y, test_size=test_size, random_state = 41)
-
-    #Scale Features using RobustScaler
-    rs.fit(X_train)
-    X_train_transformed = rs.transform(X_train)
-    X_test_transformed = rs.transform(X_test)
-
-    return X_train_transformed,Y_train, X_test_transformed, Y_test
 
 def train_model(X_train, Y_train):
 
@@ -30,3 +12,26 @@ def train_model(X_train, Y_train):
     lr.fit(X_train, Y_train)
 
     return lr
+
+# main function containing training pipeline
+
+def main():
+    train_data = data_ingestion()
+    train_data = create_target_label(train_data)
+    train_data = treat_na(train_data)
+    train_data = treat_outliers(train_data, year=2023, month_number=1)
+    train_data = engineer_features(train_data)
+    X, Y = preprocess_data(train_data)
+
+    #train model
+    final_model = train_model(X,Y)
+
+    #serialize model
+    file_name = "model_store/final_model.pkl"
+    with open(file_name,"wb") as outfile:
+        pickle.dump(final_model,outfile)
+
+#main function
+if __name__ == "__main__":
+    main()
+
